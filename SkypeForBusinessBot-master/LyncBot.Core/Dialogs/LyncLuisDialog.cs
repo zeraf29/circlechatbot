@@ -10,7 +10,8 @@ using System.Threading.Tasks;
 
 namespace LyncBot.Core.Dialogs
 {
-    [LuisModel("90ff3c2e-6afe-41b0-ae10-21b4000abc65", "249e15ad49a44eb7816c5b32bfe8b3ca")]
+    //[LuisModel("27ecf3ea-0141-44f9-91c0-303a6738c110", "fa572a05a8f74dd6a869625307fb59e4")]
+    [LuisModel("93da28ed-ba7e-4a93-a6ce-e97e860f8cb4", "fa572a05a8f74dd6a869625307fb59e4")]
     [Serializable]
     public class LyncLuisDialog : LuisDialog<object>
     {
@@ -37,6 +38,14 @@ namespace LyncBot.Core.Dialogs
             context.Wait(MessageReceived);
         }
 
+        [LuisIntent("채널")]
+        public async Task Channel(IDialogContext context, IAwaitable<IMessageActivity> message, LuisResult result)
+        {
+            
+            await context.PostOnlyOnceAsync(Responses.ChannelResponse(), nameof(Channel));
+            context.Wait(MessageReceived);
+        }
+
         [LuisIntent("GoodMorningGreetings")]
         public async Task GoodMorningGreetings(IDialogContext context, IAwaitable<IMessageActivity> message, LuisResult result)
         {
@@ -58,49 +67,24 @@ namespace LyncBot.Core.Dialogs
             context.Wait(MessageReceived);
         }
 
-        [LuisIntent("날씨")]
-        public async Task Weather(IDialogContext context, IAwaitable<IMessageActivity> message, LuisResult result)
+        [LuisIntent("검색")]
+        [LuisIntent("검 색")]
+        [LuisIntent("Search")]
+        public async Task SearchAPI(IDialogContext context, IAwaitable<IMessageActivity> message, LuisResult result)
         {
-            string zoneCode = string.Empty;
-            foreach (EntityRecommendation e in result.Entities)
+            string searchWords = string.Empty;
+            if (!context.PrivateConversationData.ContainsKey(nameof(SearchAPI)))
             {
-                if (e.Entity.Contains("서 울"))
-                    zoneCode = "1100000000";
-                else if (e.Entity.Contains("부 산"))
-                    zoneCode = "2600000000";
-                else if (e.Entity.Contains("대 구"))
-                    zoneCode = "2700000000";
-                else if (e.Entity.Contains("인 천"))
-                    zoneCode = "2800000000";
-                else if (e.Entity.Contains("광 주"))
-                    zoneCode = "2900000000";
-                else if (e.Entity.Contains("대 전"))
-                    zoneCode = "3000000000";
-                else if (e.Entity.Contains("울 산"))
-                    zoneCode = "3100000000";
-                else if (e.Entity.Contains("세 종"))
-                    zoneCode = "3611000000";
-                else if (e.Entity.Contains("경 기"))
-                    zoneCode = "4100000000";
-                else if (e.Entity.Contains("강 원"))
-                    zoneCode = "4200000000";
-                else if (e.Entity.Contains("충 남"))
-                    zoneCode = "4400000000";
-                else if (e.Entity.Contains("전 북"))
-                    zoneCode = "4500000000";
-                else if (e.Entity.Contains("전 남"))
-                    zoneCode = "4600000000";
-                else if (e.Entity.Contains("경 북"))
-                    zoneCode = "4700000000";
-                else if (e.Entity.Contains("경 남"))
-                    zoneCode = "4800000000";
-                else if (e.Entity.Contains("제 주"))
-                    zoneCode = "5000000000";
+                var activity = await message;
+                //searchWords = GetName(activity.From);
+                searchWords = result.Query;
+                //searchWords = searchWords.Replace("검색 ", "");
+                searchWords = searchWords.Replace("검색 ", "");
 
-                await context.PostAsync(Responses.WeatherResponse(zoneCode), nameof(Weather));
 
-                context.Wait(MessageReceived);
             }
+            await context.PostOnlyOnceAsync(Responses.SearchApiResponse(searchWords), nameof(SearchAPI));
+            context.Wait(MessageReceived);
         }
 
         private static string GetName(ChannelAccount from)

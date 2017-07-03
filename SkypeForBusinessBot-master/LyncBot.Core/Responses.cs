@@ -1,9 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using System.Net;
 using System.Xml;
 using System.Net.Cache;
+using System.IO;
+
+using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq;
 
 namespace LyncBot.Core
 {
@@ -30,6 +36,14 @@ namespace LyncBot.Core
             };
         }
 
+        public static List<string> ChannelResponse()
+        {
+            return new List<string>
+            {
+                "[링크:채널H] "+AdditionalFunction.SimpleUrl("http://snc.eagleoffice.co.kr/api/branch/common/slo/goSloTarget.mvc?authType=2&destination=http://ch.hanwha.com/slo/linkslo?url=http://ch.hanwha.com/&company_id=418") + "\r\n"
+            };
+        }
+
         private static List<string> GetGreeting()
         {
             var afternoon = 12;
@@ -42,13 +56,21 @@ namespace LyncBot.Core
                 return new List<string> { "Good Evening" };
         }
 
-        public static List<string> WeatherResponse(string zoneCode)
+        private static List<string> AppendName(List<string> responses, string name)
         {
-            if (string.IsNullOrEmpty(zoneCode))
+            if (!string.IsNullOrEmpty(name))
+                responses = responses.Concat(responses.Select(t => t + " " + name)).ToList();
+            return responses;
+        }
+        
+        public static List<string> SearchApiResponse(string searchWords)
+        {
+            Console.WriteLine("검색어: "+searchWords);
+            if (string.IsNullOrEmpty(searchWords))
             {
                 return new List<string>
                 {
-                    "지역을 입력해주세요."
+                    "검색어를 입력해 주세요."
                 };
             }
             string result = string.Empty;
@@ -58,102 +80,45 @@ namespace LyncBot.Core
             string wdKor = string.Empty;
             string ws = string.Empty;
             string reh = string.Empty;
-
-            string reqUrl = "http://www.kma.go.kr/wid/queryDFSRSS.jsp?zone=" + zoneCode;
+            //searchWords = "서울";
+            string searchQuery = "query=" + searchWords + "&display=10&start=1";
+            
+            string reqUrl = "https://openapi.naver.com/v1/search/webkr.xml?" + searchQuery;
 
             HttpWebRequest HttpWRequest = (HttpWebRequest)WebRequest.Create(reqUrl);
-            HttpWRequest.Proxy = null;
-            HttpWRequest.PreAuthenticate = true;
-            HttpWRequest.ServicePoint.ConnectionLimit = 32;
-            HttpWRequest.Pipelined = true; //
-            HttpWRequest.KeepAlive = true; //this is the default
-
-            HttpWRequest.CachePolicy = new HttpRequestCachePolicy(HttpRequestCacheLevel.NoCacheNoStore);
-            HttpWRequest.Headers["Cache-Control"] = "no-cache";
-            HttpWRequest.Headers["Pragma"] = "no-cache";
-
-            HttpWRequest.Timeout = 6000;
+            HttpWRequest.Headers.Add("X-Naver-Client-Id", "Q96pCi1xiWukmgaxhD_P"); // 클라이언트 아이디
+            HttpWRequest.Headers.Add("X-Naver-Client-Secret", "rTwY0sP75h");       // 클라이언트 시크릿
             HttpWRequest.ContentType = "text/xml";
+            HttpWebResponse response = (HttpWebResponse)HttpWRequest.GetResponse();
 
-            System.IO.Stream responseStream = HttpWRequest.GetResponse().GetResponseStream();
-
-            XmlDocument doc = new XmlDocument();
-            doc.Load(responseStream);
-
-            XmlNode rootNode = doc.SelectSingleNode("/rss");
-            if (rootNode != null)
+            result = "<검색어> " + searchWords + "\r\n";
+            string status = response.StatusCode.ToString();
+            if (status == "OK")
             {
-                XmlNode channelNode = rootNode.SelectSingleNode("channel");
-                if (channelNode != null)
-                {
-                    XmlNode itemNode = channelNode.SelectSingleNode("item");
-                    if (itemNode != null)
-                    {
-                        XmlNode descriptionNode = itemNode.SelectSingleNode("description");
-                        if (descriptionNode != null)
-                        {
-                            XmlNode bodyNode = descriptionNode.SelectSingleNode("body");
-                            if (bodyNode != null)
-                            {
-                                XmlNodeList dataList = bodyNode.SelectNodes("data");
-                                foreach (XmlNode dataNode in dataList)
-                                {
-                                    if (dataNode.Attributes.GetNamedItem("seq").InnerText == "0")
-                                    {
-                                        XmlNodeList nodeList = dataNode.ChildNodes;
-                                        {
-                                            if (nodeList != null)
-                                            {
-                                                foreach (XmlNode node in nodeList)
-                                                {
-                                                    if (string.Equals(node.Name, "temp")) //현재 온도
-                                                    {
-                                                        temp = node.InnerText;
-                                                    }
-                                                    if (string.Equals(node.Name, "wfKor")) //구름
-                                                    {
-                                                        wfKor = node.InnerText;
-                                                    }
-                                                    if (string.Equals(node.Name, "pop")) //강수확률
-                                                    {
-                                                        pop = node.InnerText;
-                                                    }
-                                                    if (string.Equals(node.Name, "wdKor")) //풍향
-                                                    {
-                                                        wdKor = node.InnerText;
-                                                    }
-                                                    if (string.Equals(node.Name, "ws")) //풍속
-                                                    {
-                                                        ws = node.InnerText;
-                                                    }
-                                                    if (string.Equals(node.Name, "reh")) //습도
-                                                    {
-                                                        reh = node.InnerText;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                Console.WriteLine(status);
+                Stream stream = response.GetResponseStream();
+                StreamReader reader = new StreamReader(stream, Encoding.UTF8);
+                string text = reader.ReadToEnd();
+                response.Close();
+                stream.Close();
+
+                XmlDocument doc = new XmlDocument();
+                doc.LoadXml(text);
+                int number = 1;
+                foreach (XmlNode node in doc.SelectNodes("rss/channel/item")){
+                    result += "[검색결과"+number+"]" + AdditionalFunction.ReplaceSpecialString(AdditionalFunction.remove_html_tag(node.SelectSingleNode("title").InnerText)) + "\r\n"+"[링크]"+ AdditionalFunction.SimpleUrl(node.SelectSingleNode("link").InnerText) + "\r\n";
+                    number++;
                 }
             }
-
-            result = "현재 온도 " + temp + "˚C며, 하늘은 " + wfKor + "이며 강수 확률은 " + pop + "%입니다. " + wdKor + "풍이 " + ws + "m/s로 불고 있으며, 습도는 " + reh + "%입니다.";
-
+            else
+            {
+                Console.WriteLine("Error 발생=" + status);
+            }
+            
             return new List<string>
             {
                 result
             };
-        }
-
-        private static List<string> AppendName(List<string> responses, string name)
-        {
-            if (!string.IsNullOrEmpty(name))
-                responses = responses.Concat(responses.Select(t => t + " " + name)).ToList();
-            return responses;
         }
     }
 }
